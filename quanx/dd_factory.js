@@ -6,14 +6,15 @@
   拷贝定时任务时删掉 *\/1 中的 \
   quanx:
   [task_local]
-  0 *\/3 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_factory.png enabled=true
+  0 *\/1 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_factory.png enabled=true
 
   loon:
-  cron "0 *\/3 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂
+  [Script]
+  cron "0 *\/1 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂
 
   surge:
   [Script]
-  东东工厂 = type=cron,cronexp=0 *\/3 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js,
+  东东工厂 = type=cron,cronexp=0 *\/1 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js,
  *
  *  
  **/
@@ -92,7 +93,7 @@ function showMsg() {
 
 function getFactoryInfo(cookie) {
   return new Promise((resolve) => {
-    $.get(taskUrl("jdfactory_getHomeData", {}, cookie), (err, resp, data) => {
+    $.post(taskPostUrl("jdfactory_getHomeData", {}, cookie), (err, resp, data) => {
       try {
         const {
           data: {
@@ -114,8 +115,8 @@ function getFactoryInfo(cookie) {
 
 function getAllTask(cookie) {
   return new Promise((resolve) => {
-    $.get(
-      taskUrl("jdfactory_getTaskDetail", {}, cookie),
+    $.post(
+      taskPostUrl("jdfactory_getTaskDetail", {}, cookie),
       (err, resp, _data) => {
         try {
           const {
@@ -337,8 +338,8 @@ function addEnergy(cookie) {
 
 function collectElectricity(cookie) {
   return new Promise((resolve) => {
-    $.get(
-      taskUrl("jdfactory_collectElectricity", {}, cookie),
+    $.post(
+      taskPostUrl("jdfactory_collectElectricity", {}, cookie),
       async (err, resp, _data) => {
         try {
           const {

@@ -7,6 +7,7 @@
   ^https\:\/\/api\.m\.jd\.com\/client\.action\?functionId\=interactIndex url script-request-header https://raw.githubusercontent.com/whyour/hundun/master/quanx/jdzz.cookie.js
 
   loon:
+  [Script]
   http-request ^https\:\/\/api\.m\.jd\.com\/client\.action\?functionId\=interactIndex script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jdzz.cookie.js, requires-body=false, timeout=10, tag=京东赚赚cookie
   cron "0 9 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jdzz.js, tag=京东赚赚
 
@@ -79,7 +80,8 @@ function getAllTask(token) {
       taskUrl("interactTaskIndex", { mpVersion: "3.0.6" }, token),
       (err, resp, _data) => {
         try {
-          const { data = {} } = JSON.parse(_data);
+          const { data = {}, message } = JSON.parse(_data);
+          $.log(`\n${message}\n${_data}`);
           $.allTask = data.taskDetailResList.filter((x) => x.taskId !== 3);
         } catch (e) {
           $.logErr(e, resp);
@@ -97,7 +99,8 @@ function getHomeInfo(token) {
       taskUrl("interactTaskIndex", { mpVersion: "3.0.6" }, token),
       (err, resp, _data) => {
         try {
-          const { data = {} } = JSON.parse(_data);
+          const { data = {}, message } = JSON.parse(_data);
+          $.log(`\n${message}\n${_data}`);
           resolve({ totalBeanNum: data.totalBeanNum, totalNum: data.totalNum });
         } catch (e) {
           $.logErr(e, resp);
