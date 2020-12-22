@@ -1,30 +1,38 @@
-/**
- *
+/*
+ * @Author: whyour
+ * @Github: https://github.com/whyour
+ * @Date: 2020-11-25 18:26:29
+ * @LastEditors: whyour
+ * @LastEditTime: 2020-12-06 15:10:10
+
   参考自： https://raw.githubusercontent.com/799953468/Quantumult-X/master/Scripts/JD/jd_factory.js
   增加随机助力，每次随机助力一位
   增加box自动充电配置
-  拷贝定时任务时删掉 *\/1 中的 \
   quanx:
   [task_local]
-  0 *\/1 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_factory.png enabled=true
+  0 * * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_factory.png enabled=true
 
   loon:
   [Script]
-  cron "0 *\/1 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂
+  cron "0 * * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js, tag=东东工厂
 
   surge:
   [Script]
-  东东工厂 = type=cron,cronexp=0 *\/1 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js,
+  东东工厂 = type=cron,cronexp=0 * * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/dd_factory.js,
  *
- *  
+ *
  **/
 
 const $ = new Env("东东工厂");
 const jdCookieNode = $.isNode() ? require("./jdCookie.js") : "";
 const JD_API_HOST = "https://api.m.jd.com/client.action";
-$.autoCharge = $.getdata("jd_autoCharge")
-  ? $.getdata("jd_autoCharge") === "true"
+$.autoCharge = $.getdata("dd_autoCharge")
+  ? $.getdata("dd_autoCharge") === "true"
   : false;
+$.showLog = $.getdata("dd_showLog")
+  ? $.getdata("dd_showLog") === "true"
+  : false;
+$.notifyTime = $.getdata("dd_notifyTime");
 $.result = [];
 $.cookieArr = [];
 $.allTask = [];
@@ -52,7 +60,7 @@ $.factoryInfo = {};
       await submitInviteId(userName);
       await $.wait(500);
       await createAssistUser(cookie);
-      $.result.push(
+      startHomeInfo && $.result.push(
         `名称：${startHomeInfo.name}  剩余:${startHomeInfo.couponCount}`,
         `任务前电量：${startHomeInfo.remainScore} 任务后电量：${endHomeInfo.remainScore}`,
         `获得电量：${
@@ -86,7 +94,20 @@ function getCookies() {
 
 function showMsg() {
   return new Promise((resolve) => {
-    $.msg($.name, "", `\n${$.result.join("\n")}`);
+    if (!$.factoryInfo || !$.factoryInfo.name) {
+      $.result.push('未选择商品，任务已执行完成，请及时选择商品');
+    }
+    if ($.notifyTime) {
+      const notifyTimes = $.notifyTime.split(',').map(x => x.split(':'));
+      const now = $.time('HH:mm').split(':');
+      $.log(`\n${JSON.stringify(notifyTimes)}`);
+      $.log(`\n${JSON.stringify(now)}`);
+      if (notifyTimes.some(x => x[0] === now[0] && (!x[1] || x[1] === now[1]))) {
+        $.msg($.name, "", `\n${$.result.join("\n")}`);
+      }
+    } else {
+      $.msg($.name, "", `\n${$.result.join("\n")}`);
+    }
     resolve();
   });
 }
@@ -155,21 +176,17 @@ async function browserTask(cookie) {
       signIn
     );
     await $.wait(500);
+    await queryVkComponent(cookie);
+    await $.wait(500);
     await browserMeetingFun(
       digitalAppliance.simpleRecordInfoVo.taskToken,
       cookie,
       digitalAppliance
     );
     await $.wait(500);
-    await browserMeetingFun(
-      patrolFactory.threeMealInfoVos.taskToken,
-      cookie,
-      patrolFactory
-    );
-    await $.wait(500);
-    const status = [true, true, true];
+    const status = [true, true, true, true];
     for (let i = 0; i < times; i++) {
-      if (status[0]) {
+      if (status[0] && browserMeeting.shoppingActivityVos[i]) {
         status[0] = await browserMeetingFun(
           browserMeeting.shoppingActivityVos[i].taskToken,
           cookie,
@@ -179,7 +196,7 @@ async function browserTask(cookie) {
         await getAllTask(cookie);
         await $.wait(500);
       }
-      if (status[1]) {
+      if (status[1] && lookCommodity.productInfoVos[i]) {
         status[1] = await browserMeetingFun(
           lookCommodity.productInfoVos[i].taskToken,
           cookie,
@@ -189,7 +206,7 @@ async function browserTask(cookie) {
         await getAllTask(cookie);
         await $.wait(500);
       }
-      if (status[2]) {
+      if (status[2] && followShop.followShopVo[i]) {
         await followShopFun(followShop.followShopVo[i].shopId, followShop);
         await $.wait(500);
         status[2] = await browserMeetingFun(
@@ -199,7 +216,15 @@ async function browserTask(cookie) {
         );
         await $.wait(500);
         await getAllTask(cookie);
-        await $.wait(300);
+        await $.wait(500);
+      }
+      if (status[3] && patrolFactory.threeMealInfoVos[i]) {
+        status[3] = await browserMeetingFun(
+          patrolFactory.threeMealInfoVos[i].taskToken,
+          cookie,
+          patrolFactory
+        );
+        await $.wait(500);
       }
     }
     resolve();
@@ -210,14 +235,14 @@ function submitInviteId(userName) {
   const inviteTask = $.allTask.find((x) => x.taskId === 2);
   $.log("你的互助码: " + inviteTask.assistTaskDetailVo.taskToken);
   return new Promise((resolve) => {
-    $.get(
+    $.post(
       {
-        url: `https://api.ninesix.cc/factory/${inviteTask.assistTaskDetailVo.taskToken}/${userName}`,
+        url: `https://api.ninesix.cc/api/factory/${inviteTask.assistTaskDetailVo.taskToken}/${encodeURIComponent(userName)}`,
       },
       (err, resp, _data) => {
         try {
           const { data = {} } = JSON.parse(_data);
-          $.log(`\n${data.value}\n${_data}`);
+          $.log(`\n${data.value}\n${$.showLog ? _data : ''}`);
           if (data.value) {
             $.result.push("邀请码提交成功！");
           }
@@ -233,10 +258,10 @@ function submitInviteId(userName) {
 
 function createAssistUser(cookie) {
   return new Promise((resolve) => {
-    $.get({ url: "https://api.ninesix.cc/factory" }, (err, resp, _data) => {
+    $.get({ url: "https://api.ninesix.cc/api/factory" }, (err, resp, _data) => {
       try {
         const { data = {} } = JSON.parse(_data);
-        $.log(`\n${data.value}\n${_data}`);
+        $.log(`\n${data.value}\n${$.showLog ? _data : ''}`);
         $.post(
           taskPostUrl(
             "jdfactory_collectScore",
@@ -246,7 +271,7 @@ function createAssistUser(cookie) {
           (err, resp, _data) => {
             try {
               const { data: { bizMsg } = {}, msg } = JSON.parse(_data);
-              $.log(`\n${bizMsg || msg}\n${_data}`);
+              $.log(`\n${bizMsg || msg}\n${$.showLog ? _data : ''}`);
             } catch (e) {
               $.logErr(e, resp);
             } finally {
@@ -261,17 +286,52 @@ function createAssistUser(cookie) {
   });
 }
 
+function queryVkComponent(cookie) {
+  return new Promise((resolve) => {
+    const url = `https://api.m.jd.com/client.action?functionId=queryVkComponent`;
+    const headers = {
+      Cookie: cookie,
+      Accept: `*/*`,
+      Connection: `keep-alive`,
+      "Content-Type": `application/x-www-form-urlencoded`,
+      "Accept-Encoding": `gzip, deflate, br`,
+      Host: `api.m.jd.com`,
+      "User-Agent": `JD4iPhone/167432 (iPhone; iOS 14.2.1; Scale/3.00)`,
+      "Accept-Language": `zh-Hans-CN;q=1, en-CN;q=0.9`,
+    };
+    const body = `area=5_224_238_51284&body=%7B%22componentId%22%3A%224f953e59a3af4b63b4d7c24f172db3c3%22%2C%22taskParam%22%3A%22%7B%5C%22actId%5C%22%3A%5C%228tHNdJLcqwqhkLNA8hqwNRaNu5f%5C%22%7D%22%2C%22cpUid%22%3A%228tHNdJLcqwqhkLNA8hqwNRaNu5f%22%2C%22taskSDKVersion%22%3A%221.0.3%22%2C%22businessId%22%3A%22babel%22%7D&build=167432&client=apple&clientVersion=9.2.4&d_brand=apple&d_model=iPhone13%2C2&eid=eidI1dbc812349s4S/q/ujpKSXyOXzGK5xv21kv6wS1EqYXedEuZHJTlJLIxypzPcTibwDJuaKL4WzpzGy6l9EbCHNbjrcOd4DWDBJ%2BvD5PXxaOnsmhE&isBackground=N&joycious=299&lang=zh_CN&networkType=wifi&networklibtype=JDNetworkBaseAF&openudid=93c009c471d3d33feeef2f4f3ae808c64cdd42b2&osVersion=14.2.1&partner=apple&rfs=0000&scope=10&screen=1125%2A2436&sign=e2f54520b54258b51a06749b385d25c4&st=1606351785977&sv=101&uts=0f31TVRjBSthso2NMB4UHqMG8LC7DJQ/znRGJSSaQsJgxGkOdwUtb3TN4ZLMDwHv8X7DNWY%2BdVGcDPY5S1gVW%2BpKliLjSQkOPBMF%2B0qV3phln/RHufEyY%2Be%2Bgb1VEfIZeEGahova7ztaemcsZ/smoJSi/wL7%2BTpZv1VLySww2fUX4y/EbsZ2cdg1H1zQFHAsjZmk32V0J5YWyHlJFYyDlg%3D%3D&uuid=hjudwgohxzVu96krv/T6Hg%3D%3D&wifiBssid=d73fbf335ea048d61703ce31b6ff66a7`;
+    $.post(
+      {
+        url: url,
+        headers: headers,
+        body: body,
+      },
+      (err, resp, _data) => {
+        try {
+          const { data: { bizMsg } = {}, msg } = JSON.parse(_data);
+          $.log(`\n${bizMsg || msg}\n${$.showLog ? _data : ''}`);
+        } catch (e) {
+          $.logErr(e, resp);
+        } finally {
+          resolve();
+        }
+      }
+    );
+  });
+}
+
 function browserMeetingFun(token, cookie, task) {
   return new Promise((resolve) => {
     if (parseInt(task.times) >= parseInt(task.maxTimes)) {
       resolve();
+      return;
     }
     $.post(
       taskPostUrl("jdfactory_collectScore", { taskToken: token }, cookie),
       (err, resp, _data) => {
         try {
           const { data: { bizCode, bizMsg } = {}, msg } = JSON.parse(_data);
-          $.log(`\n${task.taskName}  ${bizMsg || msg}\n${_data}`);
+          $.log(`\n${task.taskName}  ${bizMsg || msg}\n${$.showLog ? _data : ''}`);
           resolve(bizCode === 0);
         } catch (e) {
           $.logErr(e, resp);
@@ -287,6 +347,7 @@ function followShopFun(shopId, shopTask) {
   return new Promise((resolve) => {
     if (parseInt(shopTask.times) >= parseInt(shopTask.maxTimes)) {
       resolve();
+      return;
     }
     $.post(
       taskPostUrl("followShop", {
@@ -298,7 +359,7 @@ function followShopFun(shopId, shopTask) {
       (err, resp, _data) => {
         try {
           const { data: { bizMsg } = {}, msg } = JSON.parse(_data);
-          $.log(`\n${shopTask.taskName}  ${bizMsg || msg}\n${_data}`);
+          $.log(`\n${shopTask.taskName}  ${bizMsg || msg}\n${$.showLog ? _data : ''}`);
         } catch (e) {
           $.logErr(e, resp);
         } finally {
@@ -315,15 +376,15 @@ function addEnergy(cookie) {
       $.autoCharge &&
       parseInt($.factoryInfo.totalScore) <= parseInt($.factoryInfo.remainScore)
     ) {
-      $.get(
-        taskUrl("jdfactory_addEnergy", {}, cookie),
+      $.post(
+        taskPostUrl("jdfactory_addEnergy", {}, cookie),
         async (err, resp, _data) => {
           try {
             const {
               data: { bizMsg },
               msg,
             } = JSON.parse(_data);
-            $.log(`\n${bizMsg || msg}\n${_data}`);
+            $.log(`\n${bizMsg || msg}\n${$.showLog ? _data : ''}`);
           } catch (e) {
             $.logErr(e, resp);
           } finally {
@@ -346,7 +407,7 @@ function collectElectricity(cookie) {
             data: { bizMsg },
             msg,
           } = JSON.parse(_data);
-          $.log(`\n${bizMsg || msg}\n${_data}`);
+          $.log(`\n${bizMsg || msg}\n${$.showLog ? _data : ''}`);
         } catch (e) {
           $.logErr(e, resp);
         } finally {
@@ -357,27 +418,8 @@ function collectElectricity(cookie) {
   });
 }
 
-function taskUrl(function_id, body = {}, cookie) {
-  return {
-    url: `${JD_API_HOST}?functionId=${function_id}&body=${JSON.stringify(
-      body
-    )}&client=wh5&clientVersion=1.0.0`,
-    headers: {
-      Accept: `application/json, text/plain, */*`,
-      Origin: `https://h5.m.jd.com`,
-      "Accept-Encoding": `gzip, deflate, br`,
-      Cookie: cookie,
-      "Content-Type": `application/x-www-form-urlencoded`,
-      Host: `api.m.jd.com`,
-      Connection: `keep-alive`,
-      "User-Agent": `jdapp;iPhone;9.2.4;14.2.1;93c009c471d3d33feeef2f4f3ae808c64cdd42b2;network/wifi;supportApplePay/0;hasUPPay/0;hasOCPay/0;model/iPhone13,2;addressid/2340668675;supportBestPay/0;appBuild/167432;pushNoticeIsOpen/0;jdSupportDarkMode/0;pv/60.15;apprpd/Search_ProductList;ref/FinalSearchListViewController;psq/5;ads/;psn/93c009c471d3d33feeef2f4f3ae808c64cdd42b2|380;jdv/0|iosapp|t_335139774|appshare|CopyURL|1606278176973|1606278183;adk/;app_device/IOS;pap/JA2015_311210|9.2.4|IOS 14.2.1;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1`,
-      Referer: `https://h5.m.jd.com/babelDiy/Zeus/2uSsV2wHEkySvompfjB43nuKkcHp/index.html?babelChannel=ttt10&lng=116.356219&lat=40.046567&sid=0c8bb35d3e7e2f0822432b0fbeb2833w&un_area=1_2800_55833_0`,
-      "Accept-Language": `zh-cn`,
-    },
-  };
-}
-
 function taskPostUrl(functionId, body, cookie) {
+  body = typeof body === "string" ? body : JSON.stringify(body);
   return {
     url: `${JD_API_HOST}?functionId=${functionId}`,
     headers: {
@@ -392,9 +434,7 @@ function taskPostUrl(functionId, body, cookie) {
       Referer: `https://h5.m.jd.com/babelDiy/Zeus/2uSsV2wHEkySvompfjB43nuKkcHp/index.html?babelChannel=ttt10&lng=116.356219&lat=40.046567&sid=0c8bb35d3e7e2f0822432b0fbeb2833w&un_area=1_2800_55833_0`,
       "Accept-Language": `zh-cn`,
     },
-    body: `functionId=${functionId}&body=${JSON.stringify(
-      body
-    )}&client=wh5&clientVersion=1.0.0`,
+    body: `functionId=${functionId}&body=${body}&client=wh5&clientVersion=1.0.0`,
   };
 }
 

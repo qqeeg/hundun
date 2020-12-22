@@ -1,99 +1,118 @@
-const $ = new Env("互助码");
-const shareCodes = [
-  {
-    zd: $.getdata("zd_shareCode1") || "qu73szyyke7tv4sgpjojpyiq6u",
-    nc: $.getdata("nc_shareCode1") || "a1bc1602151a42d68fb8cf0ee93cc43d",
-    ddgc: $.getdata("dd_shareCode1") || "P04z54XCjVWnYaS5kZ7fCKtjCEX",
-    jxgc: $.getdata("jx_shareCode1") || "k3XRgh9SqTEODDhQVrfL1A==",
-  },
-  {
-    zd: $.getdata("zd_shareCode2") || "",
-    nc: $.getdata("nc_shareCode2") || "",
-    mc: $.getdata("mc_shareCode2") || "",
-    ddgc: $.getdata("dd_shareCode2") || "",
-    jxgc: $.getdata("jx_shareCode2") || "",
-  },
-];
+/*
+ * @Author: whyour
+ * @Github: https://github.com/whyour
+ * @Date: 2020-11-23 11:30:44
+ * @LastEditors: whyour
+ * @LastEditTime: 2020-12-12 01:32:43
+  半自动领小程序 赚京豆 中的步数领京豆, 建议定时放在步数达到2万以后，然后手动进入一次赚京豆小程序
+  quanx:
+  [task_local]
+  30 18 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/jd_zjd.js, tag=半自动领京豆, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jd_syj.png, enabled=true
+
+  loon:
+  [Script]
+  cron "30 18 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jd_zjd.js, tag=半自动领京豆
+
+  surge:
+  [Script]
+  半自动领京豆 = type=cron,cronexp=30 18 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jd_zjd.js,
+ *
+ *
+ **/
+const $ = new Env("京东赚京豆");
+
+const jdCookieNode = $.isNode() ? require("./jdCookie.js") : "";
+const JD_API_HOST = "https://api.m.jd.com/api";
+$.currentCookie = ''
 $.result = [];
-$.random = Math.floor(Math.random() * 60);
+$.cookieArr = [];
+$.allTask = [];
+$.allExchangeList = [];
+const steps = [50, 2000, 5000, 10000, 20000];
 
 !(async () => {
-  console.log(`\n此脚本延迟${$.random}秒执行\n`);
-  for (let i = 0; i < shareCodes.length; i++) {
-    const { zd, nc, mc, ddgc, jxgc } = shareCodes[i];
-    await $.wait($.random);
-    zd &&
-      (await create(
-        `http://api.turinglabs.net/api/v1/jd/bean/create/${zd}/`,
-        "种豆得豆"
-      ));
-    await $.wait($.random);
-    nc &&
-      (await create(
-        `http://api.turinglabs.net/api/v1/jd/farm/create/${nc}/`,
-        "东东农场"
-      ));
-    await $.wait($.random);
-    mc &&
-      (await create(
-        `http://api.turinglabs.net/api/v1/jd/pet/create/${mc}/`,
-        "东东萌宠"
-      ));
-    await $.wait($.random);
-    ddgc &&
-      (await create(
-        `http://api.turinglabs.net/api/v1/jd/ddfactory/create/${ddgc}/`,
-        "东东工厂"
-      ));
-    await $.wait($.random);
-    jxgc &&
-      (await create(
-        `http://api.turinglabs.net/api/v1/jd/jxfactory/create/${jxgc}/`,
-        "京喜工厂"
-      ));
+  if (!getCookies()) return;
+  for (let i = 0; i < $.cookieArr.length; i++) {
+    $.currentCookie = $.cookieArr[i];
+    if ($.currentCookie) {
+      const userName = decodeURIComponent(
+        $.currentCookie.match(/pt_pin=(.+?);/) && $.currentCookie.match(/pt_pin=(.+?);/)[1]
+      );
+      $.log(`\n开始【京东账号${i + 1}】${userName}`);
+      $.result.push(`【京东账号${i + 1}】${userName}`);
+      await exchangeJd(0);
+    }
   }
   await showMsg();
 })()
   .catch((e) => $.logErr(e))
   .finally(() => $.done());
 
-function create(path, name) {
-  return new Promise((resolve) => {
-    const url = { url: path };
-    $.get(url, async (err, resp, data) => {
-      try {
-        const needAgain = await checkWhetherNeedAgain(resp, create, path, name);
-        if (needAgain) return;
-        const _data = JSON.parse(data);
-        if (_data) {
-          $.result.push(`${name}： ${_data.message}`);
-        }
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve();
-      }
-    });
-  });
+function getCookies() {
+  if ($.isNode()) {
+    $.cookieArr = Object.values(jdCookieNode);
+  } else {
+    $.cookieArr = [$.getdata("CookieJD") || "", $.getdata("CookieJD2") || ""];
+  }
+  if (!$.cookieArr[0]) {
+    $.msg(
+      $.name,
+      "【提示】请先获取京东账号一cookie\n直接使用NobyDa的京东签到获取",
+      "https://bean.m.jd.com/",
+      { "open-url": "https://bean.m.jd.com/" }
+    );
+    return false;
+  }
+  return true;
 }
 
-function checkWhetherNeedAgain(resp, fun, url, name) {
-  return new Promise(async (resolve) => {
-    if ((resp && resp.statusCode !== 200) || !resp.body) {
-      await $.wait($.random);
-      await fun(url, name);
-      resolve(true);
-    } else {
-      resolve(false);
-    }
+function exchangeJd(i) {
+  const stepNumber = steps[i];
+  return new Promise((resolve) => {
+    $.post(
+      taskPostUrl("swat_game_exchangejingbean", { stepNumber }),
+      async (err, resp, _data) => {
+        try {
+          const { code, msg } = JSON.parse(_data);
+          $.log(`\n${msg}\n${_data}`);
+          $.result.push(`${stepNumber}步：${msg}`)
+          const next = steps[i + 1];
+          if (0 === parseInt(code) && next) {
+            await $.wait(1000);
+            await exchangeJd(i + 1);
+          }
+        } catch (e) {
+          $.logErr(e, resp);
+        } finally {
+          resolve();
+        }
+      }
+    );
   });
 }
 
 function showMsg() {
   return new Promise((resolve) => {
-    $.msg($.name, "", $.result.join("\n"));
+    $.msg($.name, "", `${$.result.join("\n")}`);
     resolve();
   });
+}
+
+function taskPostUrl(function_path, body = {}) {
+  return {
+    url: `${JD_API_HOST}?functionId=${function_path}&fromType=wxapp&timestamp=${Date.now()}`,
+    headers: {
+      Cookie: $.currentCookie,
+      Host: `api.m.jd.com`,
+      "User-Agent": `Mozilla/5.0 (iPhone; CPU iPhone OS 14_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/7.0.18(0x17001231) NetType/4G Language/zh_CN`,
+      Referer: `https://servicewechat.com/wxa5bf5ee667d91626/110/page-frame.html`,
+      "Accept-Language": `zh-cn`,
+      "Accept-Encoding": `gzip, deflate, br`,
+    },
+    body: `body=${JSON.stringify(
+      body
+    )}&appid=swat_miniprogram&client=tjj_m&screen=1920*1080&osVersion=5.0.0&networkType=wifi&sdkName=orderDetail&sdkVersion=1.0.0&clientVersion=3.1.3&area=11`,
+  };
 }
 
 // prettier-ignore

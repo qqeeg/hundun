@@ -1,50 +1,78 @@
-/**
- *
-  hostname = lkyl.dianpusoft.cn
+/*
+ * @Author: whyour
+ * @Github: https://github.com/whyour
+ * @Date: 2020-12-10 12:30:44
+ * @LastEditors: whyour
+ * @LastEditTime: 2020-12-16 10:12:54
+ * 打开京喜农场，手动完成去工厂任务，提示获取cookie成功，然后退出跑任务脚本
+
+  hostname = wq.jd.com
 
   quanx:
   [task_local]
-  0 9 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.js, tag=京东小窝, enabled=true
+  0 9,12,18 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_nc.js, tag=京喜农场, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jxnc.png, enabled=true
   [rewrite_local]
-  ^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login url script-request-body https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.cookie.js
+  ^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask url script-request-header https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_nc.cookie.js
 
   loon:
   [Script]
-  http-request ^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.cookie.js, requires-body=true, timeout=10, tag=京东小窝cookie
-  cron "0 9 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.js, tag=京东小窝
+  http-request ^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_nc.cookie.js, requires-body=false, timeout=10, tag=京喜农场cookie
+  cron "0 9,12,18 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_nc.js, tag=京喜农场
 
   surge:
   [Script]
-  京东小窝 = type=cron,cronexp=0 9 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.js,
-  京东小窝cookie = type=http-request,pattern=^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login,requires-body=1,max-size=0,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.cookie.js
+  京喜农场 = type=cron,cronexp=0 9,12,18 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_nc.js,
+  京喜农场cookie = type=http-request,pattern=^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask,requires-body=0,max-size=0,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_nc.cookie.js
  *
- *  
+ *
  **/
 
-const ddxwTokenKey1 = "jd_ddxw_name1";
-const ddxwTokenKey2 = "jd_ddxw_name2";
-const getTokenRegex = /^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login/;
-const $ = new Env("东东小窝Cookie");
+const jxNcTokenKey1 = "jxnc_token1";
+const jxNcTokenKey2 = "jxnc_token2";
+const getTokenRegex = /^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask/;
+const $ = new Env("京喜农场Cookie");
 
-const body = $request.body;
 const url = $request.url;
+const headers = $request.headers;
 
 if (getTokenRegex.test(url)) {
   try {
-    $.log('东东小窝token响应', body)
-    const obj = JSON.parse(body);
-    const token1 = $.getdata(ddxwTokenKey1)
-    if (!token1) {
-      $.setdata(obj.body.userName, ddxwTokenKey1);
-      $.log(`新的Token1：\n${obj.body.userName}，Token已更新。`);
-    } else {
-      $.setdata(obj.body.userName, ddxwTokenKey2);
-      $.log(`新的Token2：\n${obj.body.userName}，Token已更新。`);
+    const query = url.split('?')[1];
+    const params = query.split('&');
+    let obj = {};
+    for (let i = 0; i < params.length; i++) {
+      const [key, value] = params[i].split('=');
+      obj[key] = value;
     }
-    $.msg($.name, "🎉东东小窝写入Token成功！！");
+    if (!headers['Cookie']) {
+      $.logErr(`京喜农场写入Token失败，未从headers中获取到cookie`);
+    }
+    let pin = headers['Cookie'].match(/pt_pin\=(\S*)\;/)[1];
+    pin = pin.split(';')[0];
+    const result = JSON.stringify({ 'farm_jstoken': obj['farm_jstoken'], phoneid: obj.phoneid, timestamp: obj.timestamp, pin });
+    const token1 = $.getdata(jxNcTokenKey1)
+    const token2 = $.getdata(jxNcTokenKey2)
+    var accountOne = token1 ? JSON.parse(token1) ? JSON.parse(token1)['pin'] : null : null
+    var accountTwo = token2 ? JSON.parse(token2) ? JSON.parse(token2)['pin'] : null : null
+    var cookieName = " [账号一] ";
+    var cookieKey = "CookieJD";
+    if (!accountOne || obj.pin == accountOne) {
+      cookieName = " [账号一] ";
+      cookieKey = jxNcTokenKey1;
+    } else if (!accountTwo || obj.pin == accountTwo) {
+      cookieName = " [账号二] ";
+      cookieKey = jxNcTokenKey2;
+    }
+    const oldValue = $.getdata(cookieKey);
+    if (oldValue == result) {
+      console.log(`\n账号: ${pin} \n与历史京东${cookieName}Cookie相同, 跳过写入 ⚠️`)
+    } else {
+      $.setdata(result, cookieKey);
+      $.msg($.name,`账号: ${pin} 设备: ${obj.phoneid.slice(0,10)}...`, `${oldValue?`更新`:`写入`}京喜农场${cookieName} Cookie成功 🎉`);
+    }
   } catch (err) {
-    $.logErr(`东东小窝写入Token失败，执行异常：${err}。`);
-    $.msg($.name, "❌东东小窝写入Token失败");
+    $.logErr(`京喜农场写入Token失败，执行异常：${err}。`);
+    $.msg($.name, "❌京喜农场写入Token失败");
   }
 }
 

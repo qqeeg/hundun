@@ -1,40 +1,35 @@
-/**
- *
-  hostname = lkyl.dianpusoft.cn
+/*
+ * @Author: whyour
+ * @Github: https://github.com/whyour
+ * @Date: 2020-11-20 10:42:06
+ * @LastEditors: whyour
+ * @LastEditTime: 2020-12-10 15:14:24
 
   quanx:
   [task_local]
   0 9 * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.js, tag=京东小窝, img-url=https://raw.githubusercontent.com/58xinian/icon/master/ddxw.png enabled=true
-  [rewrite_local]
-  ^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login url script-request-body https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.cookie.js
 
   loon:
   [Script]
-  http-request ^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.cookie.js, requires-body=true, timeout=10, tag=京东小窝cookie
   cron "0 9 * * *" script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.js, tag=京东小窝
 
   surge:
   [Script]
   京东小窝 = type=cron,cronexp=0 9 * * *,timeout=60,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.js,
-  京东小窝cookie = type=http-request,pattern=^https\:\/\/lkyl\.dianpusoft\.cn\/api\/user\-info\/login,requires-body=1,max-size=0,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/ddxw.cookie.js
  *
- *  
+ *
  **/
 const $ = new Env("东东小窝");
 
 const jdCookieNode = $.isNode() ? require("./jdCookie.js") : "";
 const JD_API_HOST = "https://lkyl.dianpusoft.cn/api/";
-$.testTaskId = "1329472966483550209"; // 测试邀请任务
-$.userNames = [
-  $.getdata("jd_ddxw_name1") || "",
-  $.getdata("jd_ddxw_name2") || "",
-];
-$.tokens = [
-  $.getdata("jd_ddxw_token1") || "",
-  $.getdata("jd_ddxw_token2") || "",
-];
+$.userNames = [];
+$.tokens = [];
 $.woBLottery = $.getdata("jd_wob_lottery")
   ? $.getdata("jd_wob_lottery") === "true"
+  : false;
+$.showLog = $.getdata("xw_showLog")
+  ? $.getdata("xw_showLog") === "true"
   : false;
 $.result = [];
 $.cookieArr = [];
@@ -50,19 +45,18 @@ $.drawCenterInfo = {};
         cookie.match(/pt_pin=(.+?);/) && cookie.match(/pt_pin=(.+?);/)[1]
       );
       console.log(`\n开始【京东账号${i + 1}】${userName}`);
-      const isOk = await checkToken($.tokens[i]);
-      if (!isOk) {
-        await getToken($.userNames[i], i, cookie);
-      }
+      $.tokens[i] = await getToken($.userNames[i], i, cookie);
       const startHomeInfo = await getHomeInfo($.tokens[i]);
-      await getAllTask($.tokens[i]);
-      await signIn($.tokens[i]);
-      await browseTasks($.tokens[i]);
+      if (!startHomeInfo) return;
       await getDrawCenter($.tokens[i]);
       await drawTask($.tokens[i]);
+      await getAllTask($.tokens[i]);
+      if(!getValid()) return;
+      await signIn($.tokens[i]);
+      await browseTasks($.tokens[i]);
       await gameTask($.tokens[i]);
       const inviteId = await getInviteId($.tokens[i]);
-      await submitInviteId(inviteId, $.userNames[i]);
+      await submitInviteId(inviteId, userName);
       // 没人只能助力一次，全凭天意，每天0点清库
       await createAssistUser($.tokens[i]);
       const endHomeInfo = await getHomeInfo($.tokens[i]);
@@ -98,12 +92,20 @@ function getCookies() {
   return true;
 }
 
+function getValid() {
+  if ($.allTask.length > 0) {
+    return true;
+  }
+  $.msg($.name, '任务已结束，没有可执行任务!');
+  return false
+}
+
 function submitInviteId(inviteId, userName) {
   return new Promise((resolve) => {
-    $.get({ url: `https://api.ninesix.cc/code/${inviteId}/${userName}` }, (err, resp, _data) => {
+    $.post({ url: `https://api.ninesix.cc/api/code/${inviteId}/${encodeURIComponent(userName)}` }, (err, resp, _data) => {
       try {
         const { data = {} } = JSON.parse(_data);
-        $.log(`\n${data.value}\n${_data}`);
+        $.log(`\n${data.value}\n${$.showLog ? _data : ''}`);
         if (data.value) {
           $.result.push('邀请码提交成功！')
         }
@@ -123,12 +125,15 @@ function getToken(name, i, cookie) {
     }
     $.post(
       postTaskUrl("user-info/login", { body: { client: 2, userName: name } }),
-      (err, resp, data) => {
+      async (err, resp, data) => {
         try {
+          if (!data) {
+            await $.wait(1000);
+            await getToken(name, i, cookie);
+          }
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${head.msg}\n${$.showLog ? data : ''}`);
           $.tokens[i] = head.token;
-          $.setdata(head.token, `jd_ddxw_token${i + 1}`);
           resolve(head.token);
         } catch (e) {
           $.logErr(e, resp);
@@ -144,13 +149,14 @@ function checkToken(token) {
   return new Promise((resolve) => {
     if (!token) {
       resolve(false);
+      return;
     }
     $.get(
       taskUrl("ssjj-wo-home-info/queryByUserId/2", {}, token),
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${head.msg}\n${$.showLog ? data : ''}`);
           resolve(head.code === 200);
         } catch (e) {
           $.logErr(e, resp);
@@ -181,9 +187,8 @@ function getUserName(cookie, i) {
     $.post(url, async (err, resp, _data) => {
       try {
         const { data } = JSON.parse(_data);
-        $.log(`\n${data.msg}\n${_data}`);
+        $.log(`\n${data}\n${$.showLog ? _data : ''}`);
         $.userNames[i] = data;
-        $.setdata(data, `jd_ddxw_name${i + 1}`);
         resolve(data);
       } catch (e) {
         $.logErr(e, resp);
@@ -200,7 +205,12 @@ function getHomeInfo(token) {
       taskUrl("ssjj-wo-home-info/queryByUserId/2", {}, token),
       (err, resp, data) => {
         try {
-          const { body } = JSON.parse(data);
+          const { body, head = {} } = JSON.parse(data);
+          $.log(`\n获取home信息：${head.msg}\n${data}`);
+          if (!body || !body.woB) {
+            $.msg($.name, '请先开通东东小窝！')
+            resolve(false);
+          }
           resolve(body);
         } catch (e) {
           $.logErr(e, resp);
@@ -250,7 +260,7 @@ function draw(token, i) {
       (err, resp, data) => {
         try {
           const { head = {}, body = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n第${i + 1}次抽奖：${head.msg}\n${$.showLog ? data : ''}`);
           $.result.push(
             `第${i + 1}次抽奖：${body.name ? body.name : head.msg}`
           );
@@ -289,19 +299,19 @@ async function gameTask(token) {
   const _game = $.allTask.find((x) => x.ssjjTaskInfo.type === 3);
   const count = _game.ssjjTaskInfo.awardOfDayNum - _game.doneNum;
   for (let i = 0; i < count; i++) {
-    await game(token, i, _game.ssjjTaskInfo.id);
+    await game(token, _game);
     await $.wait(5000);
   }
 }
 
-function game(token, i, id) {
+function game(token, _game) {
   return new Promise((resolve) => {
     $.get(
-      taskUrl(`ssjj-task-record/game/${i+1}/${id}`, {}, token),
+      taskUrl(`ssjj-task-record/game/1/${_game.ssjjTaskInfo.id}`, {}, token),
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${_game.ssjjTaskInfo.name}：${head.msg}\n${$.showLog ? data : ''}`);
         } catch (e) {
           $.logErr(e, resp);
         } finally {
@@ -320,7 +330,7 @@ function signIn(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${clock.ssjjTaskInfo.name}：${head.msg}\n${$.showLog ? data : ''}`);
         } catch (e) {
           $.logErr(e, resp);
         } finally {
@@ -334,10 +344,10 @@ function signIn(token) {
 function createAssistUser(token) {
   const invite = $.allTask.find((x) => x.ssjjTaskInfo.type === 1);
   return new Promise((resolve) => {
-    $.get({ url: 'https://api.ninesix.cc/code' }, (err, resp, _data) => {
+    $.get({ url: 'https://api.ninesix.cc/api/code' }, (err, resp, _data) => {
       try {
         const { data = {} } = JSON.parse(_data);
-        $.log(`\n${data.value}\n${_data}`);
+        $.log(`\n${data.value}\n${$.showLog ? _data : ''}`);
         $.get(
           taskUrl(
             `ssjj-task-record/createAssistUser/${data.value}/${invite.ssjjTaskInfo.id}`,
@@ -347,7 +357,7 @@ function createAssistUser(token) {
           (err, resp, data) => {
             try {
               const { head = {} } = JSON.parse(data);
-              $.log(`\n${head.msg}\n${data}`);
+              $.log(`\n${head.msg}\n${$.showLog ? data : ''}`);
             } catch (e) {
               $.logErr(e, resp);
             } finally {
@@ -370,7 +380,7 @@ function getInviteId(token) {
       async (err, resp, data) => {
         try {
           const { body = {}, head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${head.msg}\n${$.showLog ? data : ''}`);
           $.log(`\n你的shareID：${body.id}`);
           resolve(body.id);
         } catch (e) {
@@ -395,7 +405,7 @@ function followShops(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${head.msg}\n${$.showLog ? data : ''}`);
         } catch (e) {
           $.logErr(e, resp);
         } finally {
@@ -418,7 +428,7 @@ function followChannels(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${head.msg}\n${$.showLog ? data : ''}`);
         } catch (e) {
           $.logErr(e, resp);
         } finally {
@@ -459,29 +469,29 @@ function browseTasks(token) {
     const browseCommodity = $.allTask.find((x) => x.ssjjTaskInfo.type === 10);
     const browseMeeting = $.allTask.find((x) => x.ssjjTaskInfo.type === 11);
     const times = Math.max(
-      browseShop.ssjjTaskInfo.awardOfDayNum,
-      browseChannel.ssjjTaskInfo.awardOfDayNum,
-      browseCommodity.ssjjTaskInfo.awardOfDayNum,
-      browseMeeting.ssjjTaskInfo.awardOfDayNum
+      browseShop ? browseShop.ssjjTaskInfo.awardOfDayNum : 0,
+      browseChannel ? browseChannel.ssjjTaskInfo.awardOfDayNum : 0,
+      browseCommodity ? browseCommodity.ssjjTaskInfo.awardOfDayNum : 0,
+      browseMeeting ? browseMeeting.ssjjTaskInfo.awardOfDayNum : 0
     );
     const status = [true, true, true, true];
     for (let i = 0; i < times; i++) {
-      if (status[0]) {
+      if (status[0] && browseShop) {
         status[0] = await browseShopFun(token);
         await getAllTask(token);
         await $.wait(300);
       }
-      if (status[1]) {
+      if (status[1] && browseChannel) {
         status[1] = await browseChannelFun(token);
         await getAllTask(token);
         await $.wait(300);
       }
-      if (status[2]) {
+      if (status[2] && browseCommodity) {
         status[2] = await browseCommodityFun(token);
         await getAllTask(token);
         await $.wait(300);
       }
-      if (status[3]) {
+      if (status[3] && browseMeeting) {
         status[3] = await browseMeetingFun(token);
         await getAllTask(token);
         await $.wait(300);
@@ -506,8 +516,7 @@ function browseShopFun(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
-          $.log(`\n${head.code === 200}`);
+          $.log(`\n${browseShop.ssjjTaskInfo.name}：${head.msg}\n${$.showLog ? data : ''}`);
           resolve(head.code === 200);
         } catch (e) {
           $.logErr(e, resp);
@@ -534,7 +543,7 @@ function browseChannelFun(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${browseChannel.ssjjTaskInfo.name}：${head.msg}\n${$.showLog ? data : ''}`);
           resolve(head.code === 200);
         } catch (e) {
           $.logErr(e, resp);
@@ -563,7 +572,7 @@ function browseCommodityFun(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${browseCommodity.ssjjTaskInfo.name}：${head.msg}\n${$.showLog ? data : ''}`);
           resolve(head.code === 200);
         } catch (e) {
           $.logErr(e, resp);
@@ -590,7 +599,7 @@ function browseMeetingFun(token) {
       (err, resp, data) => {
         try {
           const { head = {} } = JSON.parse(data);
-          $.log(`\n${head.msg}\n${data}`);
+          $.log(`\n${browseMeeting.ssjjTaskInfo.name}：${head.msg}\n${$.showLog ? data : ''}`);
           resolve(head.code === 200);
         } catch (e) {
           $.logErr(e, resp);
