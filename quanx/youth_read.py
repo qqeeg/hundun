@@ -4,11 +4,10 @@
 # 此脚本参考 https://raw.githubusercontent.com/Sunert/Scripts/master/Task/Youth_Read.js
 
 import traceback
-import requests
 import time
 import sys
 import os
-from notify import send
+from util import send, requests_session
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ProcessPoolExecutor
 
@@ -21,8 +20,18 @@ READ_BODY2 = ""
 # 多账号
 READ_BODYS = [READ_BODY1, ]
 
-# dingding_bot bark telegram_bot
-notify_mode = ['telegram_bot']
+# ac读取环境变量
+if "YOUTH1_READ_BODY1" in os.environ:
+  print("执行自GitHub action")
+  for i in range(3):
+    firstVar = f'YOUTH{str(i+1)}_READ_BODY1'
+    if firstVar in os.environ:
+      for j in range(10):
+        dynamicVar = f'YOUTH{str(i+1)}_READ_BODY{str(j + 1)}'
+        if dynamicVar in os.environ:
+          globals()['READ_BODY' + str(i + 1)] += f'{os.environ[dynamicVar]}&'
+    else:
+      break
 
 cur_path = os.path.abspath(os.path.dirname(__file__))
 root_path = os.path.split(cur_path)[0]
@@ -47,7 +56,7 @@ def read(body, i):
     url = 'https://ios.baertt.com/v5/article/complete.json'
     headers = {'User-Agent': 'KDApp/1.7.8 (iPhone; iOS 14.0; Scale/3.00)', 'Content-Type':
                'application/x-www-form-urlencoded;charset=utf-8'}
-    response = requests.post(
+    response = requests_session().post(
       url=url, headers=headers, data=body, timeout=30).json()
     if response['error_code'] == '0':
       if 'read_score' in response['items']:
@@ -70,13 +79,11 @@ def run(body, index):
   print(f'\n【中青看点账号{index}】{beijing_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
   print(f'\n【中青看点账号{index}】总共{len(bodyList)}个body')
   for i in range(0, len(bodyList)):
-    print(f'\n账号{index}开始中青看点第{i}次阅读')
-    read(body=bodyList[i], i=i)
+    print(f'\n账号{index}开始中青看点第{i+1}次阅读')
+    read(body=bodyList[i], i=i+1)
   print(f'\n【账号{index}中青结束】{beijing_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
 
 def main():
-  title = f'📚中青看点'
-  result = ''
   with ProcessPoolExecutor(max_workers=3) as executor:
     for i in range(0, len(READ_BODYS)):
       executor.submit(run, READ_BODYS[i], i+1)
@@ -84,7 +91,7 @@ def main():
 
   # 暂无通知
   # if beijing_datetime.hour == 23 and beijing_datetime.minute >= 0 and beijing_datetime.minute <= 10:
-  #   send(title=title, content=result, notify_mode=notify_mode)
+  #   send(title=title, content=result)
   # elif not beijing_datetime.hour == 23:
   #   print('未进行消息推送，原因：没到对应的推送时间点\n')
   # else:
