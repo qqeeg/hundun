@@ -21,17 +21,7 @@ READ_BODY2 = ""
 READ_BODYS = [READ_BODY1, ]
 
 # ac读取环境变量
-if "YOUTH1_READ_BODY1" in os.environ:
-  print("执行自GitHub action")
-  for i in range(3):
-    firstVar = f'YOUTH{str(i+1)}_READ_BODY1'
-    if firstVar in os.environ:
-      for j in range(10):
-        dynamicVar = f'YOUTH{str(i+1)}_READ_BODY{str(j + 1)}'
-        if dynamicVar in os.environ:
-          globals()['READ_BODY' + str(i + 1)] += f'{os.environ[dynamicVar]}&'
-    else:
-      break
+READ_BODY1 = os.environ["YOUTH1_READ_BODY1"]
 
 cur_path = os.path.abspath(os.path.dirname(__file__))
 root_path = os.path.split(cur_path)[0]
