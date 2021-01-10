@@ -3,7 +3,7 @@
  * @Github: https://github.com/whyour
  * @Date: 2020-12-06 11:11:11
  * @LastEditors: whyour
- * @LastEditTime: 2020-12-16 10:45:58
+ * @LastEditTime: 2021-01-10 15:18:55
  * 打开京喜农场，手动完成工厂任务或者签到任务，或者金牌厂长任务，提示获取cookie成功，然后退出跑任务脚本
 
   hostname = wq.jd.com
@@ -68,7 +68,7 @@ $.drip = 0;
       getMessage(endInfo, startInfo);
       await submitInviteId(userName);
       await $.wait(500);
-      await createAssistUser();
+      //await createAssistUser();
     }
   }
   await showMsg();
@@ -111,7 +111,7 @@ function getTaskList() {
       try {
         const res = data.match(/try\{whyour\(([\s\S]*)\)\;\}catch\(e\)\{\}/)[1];
         const { detail, msg, task = [], retmsg, ...other } = JSON.parse(res);
-        $.helpTask = task.filter(x => x.tasktype === 2)[0];
+        $.helpTask = task.filter(x => x.tasktype === 2)[0] || { eachtimeget: 0, limit: 0 };
         $.allTask = task.filter(x => x.tasktype !== 3 && x.tasktype !== 2 && parseInt(x.left) > 0);
         $.info = other;
         $.log(`\n获取任务列表 ${retmsg} 总共${$.allTask.length}个任务！`);
@@ -131,9 +131,10 @@ function getTaskList() {
 
 function  browserTask() {
   return new Promise(async resolve => {
-    const times = Math.max(...[...$.allTask].map(x => x.limit));
-    for (let i = 0; i < $.allTask.length; i++) {
-      const task = $.allTask[i];
+    const tasks = $.allTask.filter(x => x.tasklevel !== 6);
+    const times = Math.max(...[...tasks].map(x => x.limit));
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
       $.log(`\n开始第${i + 1}个任务：${task.taskname}`);
       const status = [0];
       for (let i = 0; i < times; i++) {
@@ -177,14 +178,14 @@ function answerTask() {
       async (err, resp, data) => {
         try {
           const res = data.match(/try\{whyour\(([\s\S]*)\)\;\}catch\(e\)\{\}/)[1];
-          let { ret, retmsg } = JSON.parse(res);
-          retmsg = retmsg === '' ? retmsg : 'success';
+          let { ret, retmsg, right } = JSON.parse(res);
+          retmsg = retmsg !== '' ? retmsg : 'success';
           $.log(
             `\n${taskname}[做任务]：${retmsg.indexOf('活动太火爆了') !== -1 ? '任务进行中或者未到任务时间' : retmsg}${
               $.showLog ? '\n' + res : ''
             }`,
           );
-          if (ret === 0) {
+          if (ret === 0 && right === 1) {
             $.drip += eachtimeget;
           }
           if (((ret !== 0 && ret !== 1029) || retmsg === 'ans err') && $.answer < 4) {
@@ -218,7 +219,7 @@ function doTask({ tasklevel, left, taskname, eachtimeget }) {
         try {
           const res = data.match(/try\{whyour\(([\s\S]*)\)\;\}catch\(e\)\{\}/)[1];
           let { ret, retmsg } = JSON.parse(res);
-          retmsg = retmsg === '' ? retmsg : 'success';
+          retmsg = retmsg !== '' ? retmsg : 'success';
           $.log(
             `\n${taskname}[做任务]：${retmsg.indexOf('活动太火爆了') !== -1 ? '任务进行中或者未到任务时间' : retmsg}${
               $.showLog ? '\n' + res : ''
